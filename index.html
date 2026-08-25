@@ -78,6 +78,14 @@
     border-radius:10px;padding:12px 14px;font-size:13px;color:#ffb3a8;margin-top:14px;
   }
 
+  .toggle-group{display:flex;gap:10px;}
+  .toggle-btn{
+    flex:1;padding:12px;font-size:15px;font-weight:600;border-radius:10px;
+    border:1px solid var(--track);background:#081035;color:var(--muted);cursor:pointer;
+  }
+  .toggle-btn.active{background:var(--accent);color:#1a1200;border-color:var(--accent);}
+  .toggle-btn.active[data-val="oui"]{background:var(--club-red);color:#fff;border-color:var(--club-red);}
+
   button{
     width:100%;padding:16px;font-size:17px;font-weight:700;border:none;
     border-radius:12px;background:var(--accent);color:#1a1200;cursor:pointer;
@@ -165,6 +173,7 @@
       <div class="seg" data-seg="1"></div>
       <div class="seg" data-seg="2"></div>
       <div class="seg" data-seg="3"></div>
+      <div class="seg" data-seg="4"></div>
     </div>
 
     <!-- Étape 0 : prénom -->
@@ -236,6 +245,14 @@
           <div class="scale-labels"><span>Aucune</span><span>Très forte</span></div>
         </div>
         <div class="alert-box" id="douleur-alert">⚠️ Score élevé : préviens ton coach directement après ce check-in.</div>
+        <div class="question" style="margin-top:26px;margin-bottom:0;">
+          <div class="q-head"><span class="q-title">Malade aujourd'hui ?</span></div>
+          <div class="toggle-group" id="toggle-malade" data-value="non">
+            <button type="button" class="toggle-btn active" data-val="non">Non</button>
+            <button type="button" class="toggle-btn" data-val="oui">Oui</button>
+          </div>
+        </div>
+        <div class="alert-box" id="malade-alert">🤒 Pense à en parler à ton coach.</div>
       </div>
       <div class="nav-row">
         <button class="btn-secondary" data-back="1">Précédent</button>
@@ -263,9 +280,43 @@
           <input type="range" min="1" max="10" value="5" id="stress">
           <div class="scale-labels"><span>Aucun</span><span>Très élevé</span></div>
         </div>
+        <div class="question">
+          <div class="q-head"><span class="q-title">Stress école</span><span class="q-value" id="val-stress_ecole">5</span></div>
+          <input type="range" min="1" max="10" value="5" id="stress_ecole">
+          <div class="scale-labels"><span>Aucun</span><span>Très élevé</span></div>
+        </div>
       </div>
       <div class="nav-row">
         <button class="btn-secondary" data-back="2">Précédent</button>
+        <button data-next="4">Suivant</button>
+      </div>
+    </div>
+
+    <!-- Étape 4 : routine & hygiène de vie -->
+    <div class="step" data-step="4">
+      <h1>4. Routine & hygiène de vie</h1>
+      <p class="sub">Les à-côtés qui comptent aussi</p>
+      <div class="card">
+        <div class="question">
+          <div class="q-head"><span class="q-title">Hydratation</span><span class="q-value" id="val-hydratation">5</span></div>
+          <input type="range" min="1" max="10" value="5" id="hydratation">
+          <div class="scale-labels"><span>Très insuffisante</span><span>Excellente</span></div>
+        </div>
+        <div class="question" style="margin-bottom:0;">
+          <div class="q-head"><span class="q-title">Alimentation</span><span class="q-value" id="val-alimentation">5</span></div>
+          <input type="range" min="1" max="10" value="5" id="alimentation">
+          <div class="scale-labels"><span>Très mauvaise</span><span>Excellente</span></div>
+        </div>
+        <div class="question" style="margin-top:26px;margin-bottom:0;">
+          <div class="q-head"><span class="q-title">Routine d'étirements faite ?</span></div>
+          <div class="toggle-group" id="toggle-etirements" data-value="non">
+            <button type="button" class="toggle-btn active" data-val="non">Non</button>
+            <button type="button" class="toggle-btn" data-val="oui">Oui</button>
+          </div>
+        </div>
+      </div>
+      <div class="nav-row">
+        <button class="btn-secondary" data-back="3">Précédent</button>
         <button id="btn-envoyer">Envoyer</button>
       </div>
     </div>
@@ -358,7 +409,7 @@
   }
 
   // ---------- Sliders : mise à jour des valeurs affichées ----------
-  const allFields = ["qualite","quantite","humeur","energie","courbatures","douleur","confiance","motivation","stress"];
+  const allFields = ["qualite","quantite","humeur","energie","courbatures","douleur","confiance","motivation","stress","stress_ecole","hydratation","alimentation"];
   allFields.forEach(id => {
     const slider = document.getElementById(id);
     const out = document.getElementById("val-" + id);
@@ -371,6 +422,25 @@
   douleurSlider.addEventListener("input", () => {
     douleurAlert.style.display = parseInt(douleurSlider.value) >= 6 ? "block" : "none";
   });
+
+  // ---------- Boutons oui/non (malade, étirements) ----------
+  const toggleGroups = ["toggle-malade", "toggle-etirements"];
+  toggleGroups.forEach(groupId => {
+    const group = document.getElementById(groupId);
+    group.querySelectorAll(".toggle-btn").forEach(btn => {
+      btn.addEventListener("click", () => {
+        group.querySelectorAll(".toggle-btn").forEach(b => b.classList.remove("active"));
+        btn.classList.add("active");
+        group.dataset.value = btn.dataset.val;
+        if(groupId === "toggle-malade"){
+          document.getElementById("malade-alert").style.display = (btn.dataset.val === "oui") ? "block" : "none";
+        }
+      });
+    });
+  });
+  function getToggleValue(groupId){
+    return document.getElementById(groupId).dataset.value === "oui";
+  }
 
   // ---------- Catégorie (depuis le lien ?categorie=XXX) ----------
   const URL_CATEGORIE = (new URLSearchParams(window.location.search).get("categorie") || "").trim();
@@ -493,6 +563,8 @@
       const dbKey = fieldToDb[id] || id;
       row[dbKey] = parseInt(document.getElementById(id).value);
     });
+    row.malade = getToggleValue("toggle-malade");
+    row.etirements = getToggleValue("toggle-etirements");
 
     const btn = document.getElementById("btn-envoyer");
     btn.disabled = true;
@@ -539,6 +611,12 @@
       document.getElementById("val-" + id).textContent = "5";
     });
     douleurAlert.style.display = "none";
+    toggleGroups.forEach(groupId => {
+      const group = document.getElementById(groupId);
+      group.dataset.value = "non";
+      group.querySelectorAll(".toggle-btn").forEach(b => b.classList.toggle("active", b.dataset.val === "non"));
+    });
+    document.getElementById("malade-alert").style.display = "none";
     document.querySelectorAll(".step, #progress-bar").forEach(el => el.style.display = "");
     document.getElementById("confirm").style.display = "none";
     const btn = document.getElementById("btn-envoyer");
@@ -683,8 +761,14 @@
   let currentUserCategorie = "";
   let currentPlayerEntries = [];
 
-  const tableCols = ["qualite_sommeil","quantite_sommeil","humeur","energie","courbatures","douleur","confiance","motivation","stress"];
-  const tableLabels = ["Qualité sommeil","Quantité sommeil","Humeur","Énergie","Courbatures","Douleur","Confiance","Motivation","Stress"];
+  const tableCols = ["qualite_sommeil","quantite_sommeil","humeur","energie","courbatures","douleur","malade","confiance","motivation","stress","stress_ecole","hydratation","alimentation","etirements"];
+  const tableLabels = ["Qualité sommeil","Quantité sommeil","Humeur","Énergie","Courbatures","Douleur","Malade","Confiance","Motivation","Stress","Stress école","Hydratation","Alimentation","Étirements"];
+  const BOOLEAN_COLS = ["malade","etirements"];
+  function formatCellValue(col, value){
+    if(value === null || value === undefined) return "-";
+    if(BOOLEAN_COLS.includes(col)) return value === true ? "Oui" : "Non";
+    return value;
+  }
 
   const THEME_COLORS = { sommeil: "#4a90e2", general: "#e63946", mental: "#2ecc71" };
   const THEME_LABELS = { sommeil: "Sommeil", general: "État général (alerte)", mental: "Mental" };
@@ -753,6 +837,7 @@
       const alerts = computeAlerts(entries);
       let badges = "";
       if(alerts.painAlert) badges += ' <span title="Douleur élevée sur la dernière réponse">⚠️</span>';
+      if(alerts.sickAlert) badges += ' <span title="Malade sur la dernière réponse">🤒</span>';
       if(alerts.sleepAlert) badges += ' <span title="Sommeil faible depuis ' + alerts.sleepStreak + ' réponses">😴</span>';
       html += '<button class="player-item" data-player="' + escapeHtml(g.prenom) + '" data-categorie="' + escapeHtml(g.categorie) + '">' +
         '<div><div class="p-name">' + escapeHtml(g.prenom) + badges + '</div>' +
@@ -771,6 +856,7 @@
     const asc = [...entries].sort((a,b) => a.created_at.localeCompare(b.created_at));
     const last = asc[asc.length - 1];
     const painAlert = !!(last && last.douleur !== null && last.douleur !== undefined && last.douleur >= 6);
+    const sickAlert = !!(last && last.malade === true);
 
     let streak = 0;
     for(let i = asc.length - 1; i >= 0; i--){
@@ -779,14 +865,14 @@
       if(q === null || q === undefined || t === null || t === undefined) break;
       if((q + t) < 10){ streak++; } else { break; }
     }
-    return { painAlert, sleepAlert: streak >= 3, sleepStreak: streak };
+    return { painAlert, sickAlert, sleepAlert: streak >= 3, sleepStreak: streak };
   }
 
   function computeThemeScores(e){
     return {
       sommeil: avg([e.qualite_sommeil, e.quantite_sommeil, e.humeur]),
       general: avg([invert(e.energie), e.courbatures, e.douleur]),
-      mental: avg([e.confiance, e.motivation, invert(e.stress)])
+      mental: avg([e.confiance, e.motivation, invert(e.stress), invert(e.stress_ecole)])
     };
   }
   function invert(v){ return (v === null || v === undefined) ? null : (11 - v); }
@@ -810,6 +896,9 @@
     let alertsHtml = "";
     if(alerts.painAlert){
       alertsHtml += '<div class="alert-box" style="display:block;">⚠️ Douleur élevée sur la dernière réponse.</div>';
+    }
+    if(alerts.sickAlert){
+      alertsHtml += '<div class="alert-box" style="display:block;margin-top:8px;">🤒 Malade sur la dernière réponse.</div>';
     }
     if(alerts.sleepAlert){
       alertsHtml += '<div class="alert-box" style="display:block;margin-top:8px;">😴 Sommeil faible (qualité + quantité) depuis ' + alerts.sleepStreak + ' réponses consécutives.</div>';
@@ -837,7 +926,7 @@
       const alertRow = (e.douleur !== null && e.douleur !== undefined && e.douleur >= 6);
       html += "<tr" + (alertRow ? ' class="row-alert"' : "") + ">";
       html += "<td>" + escapeHtml(formatDate(e.created_at)) + "</td>";
-      tableCols.forEach(c => html += "<td>" + escapeHtml(e[c] !== null && e[c] !== undefined ? e[c] : "-") + "</td>");
+      tableCols.forEach(c => html += "<td>" + escapeHtml(formatCellValue(c, e[c])) + "</td>");
       html += '<td><button class="btn-delete" data-id="' + e.id + '">🗑</button></td>';
       html += "</tr>";
     });
@@ -1016,29 +1105,41 @@
     select.innerHTML = keys.map(k => '<option value="' + k + '">' + seen[k] + '</option>').join("");
   }
 
-  // Découpe un mois en 4 semaines fixes (jours 1-7, 8-14, 15-21, 22-fin)
-  function weekBucketOf(day){
-    if(day <= 7) return 0;
-    if(day <= 14) return 1;
-    if(day <= 21) return 2;
-    return 3;
+  // Vraies semaines calendaires (lundi à dimanche), même si une semaine
+  // déborde sur le mois précédent/suivant.
+  function weekStartOf(date){
+    const d = new Date(date);
+    const day = d.getDay();
+    const diff = (day === 0) ? -6 : 1 - day;
+    d.setDate(d.getDate() + diff);
+    d.setHours(0,0,0,0);
+    return d;
+  }
+  function weekLabelOf(weekStart){
+    return "S. " + weekStart.toLocaleDateString("fr-FR", {day:"2-digit", month:"2-digit"});
   }
 
   function buildWeeklyNotes(monthEntries){
-    const weeks = [[],[],[],[]];
+    const buckets = {};
     monthEntries.forEach(e => {
       const d = new Date(e.created_at);
-      weeks[weekBucketOf(d.getDate())].push(computeThemeScores(e));
+      const ws = weekStartOf(d);
+      const key = ws.toISOString().slice(0,10);
+      if(!buckets[key]) buckets[key] = { start: ws, scores: [] };
+      buckets[key].scores.push(computeThemeScores(e));
     });
+    const weekKeys = Object.keys(buckets).sort();
+    const labels = weekKeys.map(k => weekLabelOf(buckets[k].start));
+
     const themes = ["sommeil","general","mental"];
-    const result = {};
+    const values = {};
     themes.forEach(t => {
-      result[t] = weeks.map(weekScores => {
-        const vals = weekScores.map(s => s[t]).filter(v => v !== null && v !== undefined);
+      values[t] = weekKeys.map(k => {
+        const vals = buckets[k].scores.map(s => s[t]).filter(v => v !== null && v !== undefined);
         return vals.length ? (vals.reduce((a,b)=>a+b,0)/vals.length) : null;
       });
     });
-    return result;
+    return { labels, values };
   }
 
   function formatDate(iso){
@@ -1068,7 +1169,7 @@
     const monthLabel = monthLabelOf(monthEntries[0].created_at);
 
     const { jsPDF } = window.jspdf;
-    const doc = new jsPDF({ unit: "pt", format: "a4" });
+    const doc = new jsPDF({ unit: "pt", format: "a4", orientation: "landscape" });
     const margin = 40;
     const pageWidth = doc.internal.pageSize.getWidth();
     const pageHeight = doc.internal.pageSize.getHeight();
@@ -1112,8 +1213,14 @@
     document.body.appendChild(tmpCanvas);
     drawChart(tmpCanvas, monthSeries);
     const imgData = tmpCanvas.toDataURL("image/png");
-    const imgWidth = pageWidth - margin*2;
-    const imgHeight = imgWidth * (tmpCanvas.height / tmpCanvas.width);
+    let imgWidth = pageWidth - margin*2;
+    let imgHeight = imgWidth * (tmpCanvas.height / tmpCanvas.width);
+    const maxChartHeight = 140;
+    if(imgHeight > maxChartHeight){
+      const scale = maxChartHeight / imgHeight;
+      imgHeight = maxChartHeight;
+      imgWidth = imgWidth * scale;
+    }
     doc.addImage(imgData, "PNG", margin, y, imgWidth, imgHeight);
     document.body.removeChild(tmpCanvas);
     y += imgHeight + 12;
@@ -1125,8 +1232,9 @@
     doc.setTextColor(20,20,20);
     y += 22;
 
-    // ---------- Notes générales par semaine (3 x 4) ----------
+    // ---------- Notes générales par semaine calendaire ----------
     const weekly = buildWeeklyNotes(monthEntries);
+    const nWeeks = weekly.labels.length;
     const themeRows = [
       { key: "sommeil", label: "Sommeil", color: [74,144,226] },
       { key: "general", label: "Etat general", color: [230,57,70] },
@@ -1138,15 +1246,15 @@
     doc.text("Note generale par semaine (/10)", margin, y);
     y += 16;
 
-    const noteColWidth = (pageWidth - margin*2 - 110) / 4;
+    const noteColWidth = (pageWidth - margin*2 - 110) / nWeeks;
     doc.setFillColor(...NAVY);
     doc.rect(margin, y - 10, pageWidth - margin*2, 16, "F");
     doc.setTextColor(255,255,255);
     doc.setFontSize(8);
     doc.text("Critere", margin + 4, y);
-    for(let w=0; w<4; w++){
-      doc.text("Semaine " + (w+1), margin + 110 + w*noteColWidth + 4, y);
-    }
+    weekly.labels.forEach((label, w) => {
+      doc.text(label, margin + 110 + w*noteColWidth + 4, y);
+    });
     y += 16;
 
     themeRows.forEach(row => {
@@ -1155,13 +1263,34 @@
       doc.setTextColor(20,20,20);
       doc.setFontSize(9);
       doc.text(row.label, margin + 10, y);
-      weekly[row.key].forEach((val, w) => {
+      weekly.values[row.key].forEach((val, w) => {
         const text = (val === null) ? "-" : val.toFixed(1);
         doc.text(text, margin + 110 + w*noteColWidth + 4, y);
       });
       y += 16;
     });
-    y += 14;
+    y += 20;
+
+    // ---------- Résumé Routine & hygiène de vie ----------
+    const hydrataionVals = monthEntries.map(e => e.hydratation).filter(v => v !== null && v !== undefined);
+    const alimentationVals = monthEntries.map(e => e.alimentation).filter(v => v !== null && v !== undefined);
+    const etirementsVals = monthEntries.filter(e => e.etirements !== null && e.etirements !== undefined);
+    const etirementsOui = etirementsVals.filter(e => e.etirements === true).length;
+
+    doc.setFontSize(12);
+    doc.setTextColor(20,20,20);
+    doc.text("Routine et hygiene de vie - moyennes du mois", margin, y);
+    y += 18;
+
+    doc.setFontSize(9);
+    const hydraAvg = hydrataionVals.length ? (hydrataionVals.reduce((a,b)=>a+b,0)/hydrataionVals.length).toFixed(1) : "-";
+    const alimAvg = alimentationVals.length ? (alimentationVals.reduce((a,b)=>a+b,0)/alimentationVals.length).toFixed(1) : "-";
+    const etirPct = etirementsVals.length ? Math.round((etirementsOui/etirementsVals.length)*100) : null;
+
+    doc.text("Hydratation moyenne : " + hydraAvg + "/10", margin, y);
+    doc.text("Alimentation moyenne : " + alimAvg + "/10", margin + 220, y);
+    doc.text("Routine d'etirements faite : " + (etirPct === null ? "-" : etirPct + "% des reponses (" + etirementsOui + "/" + etirementsVals.length + ")"), margin + 440, y);
+    y += 24;
 
     // ---------- Détail des réponses du mois ----------
     doc.setFontSize(11);
@@ -1169,13 +1298,15 @@
     doc.text("Detail des reponses - " + monthLabel, margin, y);
     y += 14;
 
-    const shortLabels = ["Date","Qual.","Quant.","Hum.","Ener.","Courb.","Doul.","Conf.","Motiv.","Stress"];
-    const colWidths = [82, 46, 46, 46, 46, 46, 46, 46, 46, 46];
+    const shortLabels = ["Date","Qual.","Quant.","Hum.","Ener.","Courb.","Doul.","Malade","Conf.","Motiv.","Stress","Str.Ecole","Hydra.","Alim.","Étir."];
+    const dateColWidth = 68;
+    const otherColWidth = (pageWidth - margin*2 - dateColWidth) / (shortLabels.length - 1);
+    const colWidths = [dateColWidth].concat(Array(shortLabels.length - 1).fill(otherColWidth));
     const colX = [margin];
     for(let i=1;i<colWidths.length;i++) colX.push(colX[i-1] + colWidths[i-1]);
 
     function drawTableHeader(){
-      doc.setFontSize(8);
+      doc.setFontSize(7);
       doc.setTextColor(255,255,255);
       doc.setFillColor(...NAVY);
       doc.rect(margin, y - 10, pageWidth - margin*2, 16, "F");
@@ -1185,7 +1316,7 @@
     }
 
     drawTableHeader();
-    doc.setFontSize(8);
+    doc.setFontSize(7);
 
     const sortedDesc = [...monthEntries].sort((a,b) => b.created_at.localeCompare(a.created_at));
     sortedDesc.forEach(e => {
@@ -1193,14 +1324,14 @@
         doc.addPage();
         y = margin;
         drawTableHeader();
-        doc.setFontSize(8);
+        doc.setFontSize(7);
       }
-      const alertRow = (e.douleur !== null && e.douleur !== undefined && e.douleur >= 6);
+      const alertRow = (e.douleur !== null && e.douleur !== undefined && e.douleur >= 6) || (e.malade === true);
       if(alertRow){
         doc.setFillColor(255,225,220);
         doc.rect(margin, y - 9, pageWidth - margin*2, 13, "F");
       }
-      const values = [formatDateShort(e.created_at)].concat(tableCols.map(c => (e[c] !== null && e[c] !== undefined) ? String(e[c]) : "-"));
+      const values = [formatDateShort(e.created_at)].concat(tableCols.map(c => String(formatCellValue(c, e[c]))));
       values.forEach((v, i) => doc.text(v, colX[i] + 2, y));
       y += 13;
     });
@@ -1222,7 +1353,7 @@
     const header = ["Prenom","Date"].concat(tableLabels);
     const rows = entries.map(e => {
       const base = [e.prenom, formatDate(e.created_at)];
-      tableCols.forEach(c => base.push(e[c] !== null && e[c] !== undefined ? e[c] : ""));
+      tableCols.forEach(c => base.push(formatCellValue(c, e[c])));
       return base;
     });
     const csv = [header, ...rows].map(r => r.map(v => '"' + String(v).replace(/"/g,'""') + '"').join(",")).join("\n");
