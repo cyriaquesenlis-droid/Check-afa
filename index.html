@@ -112,7 +112,7 @@
     margin-top:20px;text-decoration:underline;cursor:pointer;background:none;border:none;width:100%;
   }
 
-  #coach-login, #coach-players, #coach-player-detail{display:none;}
+  #coach-login, #coach-players, #coach-player-detail, #screen-rpe{display:none;}
   .error-msg{color:var(--danger);font-size:13px;margin:-6px 0 12px;display:none;}
 
   .coach-toolbar{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;}
@@ -195,6 +195,7 @@
         </div>
       </div>
       <button id="btn-start">Commencer</button>
+      <button id="btn-open-rpe" class="btn-secondary" style="display:none;margin-top:10px;">🏃 Noter ta séance (RPE)</button>
     </div>
 
     <!-- Étape 1 : sommeil -->
@@ -330,6 +331,50 @@
     <button class="coach-link" id="btn-open-coach">Espace coach →</button>
   </div>
 
+  <div id="screen-rpe">
+    <h1>🏃 Ta séance</h1>
+    <p class="sub">RPE = à quel point la séance était dure pour toi.</p>
+
+    <div class="card">
+      <label class="field-label">Type</label>
+      <div class="toggle-group" id="rpe-type" data-value="entrainement">
+        <button type="button" class="toggle-btn active" data-val="entrainement">Entraînement</button>
+        <button type="button" class="toggle-btn" data-val="match">Match</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="question">
+        <div class="q-head"><span class="q-title">Difficulté ressentie (RPE)</span><span class="q-value" id="val-rpe-scale">5</span></div>
+        <input type="range" min="1" max="10" value="5" id="rpe-scale">
+        <div class="scale-labels"><span>Très facile</span><span>Épuisant</span></div>
+      </div>
+      <div class="question">
+        <div class="q-head"><span class="q-title">Durée</span><span class="q-value" id="val-rpe-duree">60 min</span></div>
+        <input type="range" min="0" max="120" step="5" value="60" id="rpe-duree">
+        <div class="scale-labels"><span>0 min</span><span>120 min</span></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <label class="field-label" for="rpe-prenom">Prénom</label>
+      <div class="autocomplete-wrap">
+        <input type="text" id="rpe-prenom" placeholder="Ton prénom" autocomplete="off" style="margin-bottom:0;">
+        <div class="suggestions" id="rpe-prenom-suggestions"></div>
+      </div>
+    </div>
+
+    <button id="btn-rpe-envoyer">Envoyer</button>
+
+    <div id="rpe-confirm" style="display:none;text-align:center;padding:20px;">
+      <h2 style="color:var(--accent);margin-bottom:8px;">C'est envoyé ✓</h2>
+      <p style="color:var(--muted);font-size:14px;">Merci, bonne récup'.</p>
+      <button class="btn-secondary" id="btn-rpe-new" style="margin-top:16px;">Joueur suivant</button>
+    </div>
+
+    <button class="coach-link" id="btn-rpe-back">← Retour au check-in</button>
+  </div>
+
   <div id="coach-login">
     <h1>Espace coach</h1>
     <p class="sub">Connecte-toi avec ton compte Supabase.</p>
@@ -353,6 +398,11 @@
         <option value="">Toutes catégories</option>
       </select>
       <button class="btn-delete" id="btn-delete-categorie" style="display:none;width:100%;margin-top:10px;padding:12px;">🗑 Supprimer toute cette catégorie</button>
+      <div id="rpe-settings-card" class="card" style="display:none;margin-top:14px;padding:14px;">
+        <div class="field-label">RPE (charge d'entraînement)</div>
+        <p id="rpe-status-text" style="font-size:13px;color:var(--muted);margin:0 0 10px;"></p>
+        <button class="btn-secondary" id="btn-toggle-rpe" style="width:100%;"></button>
+      </div>
     </div>
     <div class="coach-toolbar">
       <button id="btn-refresh-players">Actualiser</button>
@@ -382,6 +432,11 @@
       <button class="btn-secondary" id="btn-export-player">Export CSV</button>
     </div>
     <div id="player-table-container" class="table-wrap"></div>
+
+    <h1 style="margin-top:26px;font-size:17px;">🏃 Charge d'entraînement (RPE)</h1>
+    <div id="rpe-acwr-card" class="card" style="display:none;"></div>
+    <div id="rpe-table-container" class="table-wrap" style="margin-top:10px;"></div>
+
     <button class="coach-link" id="btn-to-form-from-detail">← Retour au formulaire</button>
   </div>
 
@@ -441,6 +496,16 @@
   function getToggleValue(groupId){
     return document.getElementById(groupId).dataset.value === "oui";
   }
+
+  // Sélecteur simple à 2 boutons (ex: Entraînement / Match) sans logique oui/non
+  const rpeTypeGroup = document.getElementById("rpe-type");
+  rpeTypeGroup.querySelectorAll(".toggle-btn").forEach(btn => {
+    btn.addEventListener("click", () => {
+      rpeTypeGroup.querySelectorAll(".toggle-btn").forEach(b => b.classList.remove("active"));
+      btn.classList.add("active");
+      rpeTypeGroup.dataset.value = btn.dataset.val;
+    });
+  });
 
   // ---------- Catégorie (depuis le lien ?categorie=XXX) ----------
   const URL_CATEGORIE = (new URLSearchParams(window.location.search).get("categorie") || "").trim();
@@ -511,9 +576,26 @@
     const cat = getCategorie();
     return rosterByCategorie[cat] ? [...rosterByCategorie[cat]].sort((a,b) => a.localeCompare(b, "fr")) : [];
   });
+  setupAutocomplete("rpe-prenom", "rpe-prenom-suggestions", () => {
+    const cat = getCategorie();
+    return rosterByCategorie[cat] ? [...rosterByCategorie[cat]].sort((a,b) => a.localeCompare(b, "fr")) : [];
+  });
   document.getElementById("categorie-input").addEventListener("change", () => {
     document.getElementById("prenom").value = "";
   });
+
+  // ---------- RPE : visible seulement si activé par le coach pour cette catégorie ----------
+  async function checkRpeEnabled(){
+    if(!sb) return;
+    try{
+      const { data } = await sb.from("rpe_settings").select("enabled").eq("categorie", getCategorie()).maybeSingle();
+      document.getElementById("btn-open-rpe").style.display = (data && data.enabled) ? "block" : "none";
+    }catch(e){ /* pas grave, le bouton reste masqué */ }
+  }
+  checkRpeEnabled();
+  if(!URL_CATEGORIE){
+    document.getElementById("categorie-input").addEventListener("change", checkRpeEnabled);
+  }
 
   // ---------- Navigation entre étapes ----------
   const steps = document.querySelectorAll(".step");
@@ -628,12 +710,13 @@
 
   // ---------- Espace coach ----------
   const screenForm = document.getElementById("screen-form");
+  const screenRpe = document.getElementById("screen-rpe");
   const coachLogin = document.getElementById("coach-login");
   const coachPlayers = document.getElementById("coach-players");
   const coachPlayerDetail = document.getElementById("coach-player-detail");
   const coachError = document.getElementById("coach-error");
 
-  const allScreens = [screenForm, coachLogin, coachPlayers, coachPlayerDetail];
+  const allScreens = [screenForm, screenRpe, coachLogin, coachPlayers, coachPlayerDetail];
   function showScreen(el){
     allScreens.forEach(s => s.style.display = "none");
     el.style.display = "block";
@@ -645,6 +728,82 @@
     showScreen(coachLogin);
   });
   document.getElementById("btn-back-to-form-1").addEventListener("click", () => showScreen(screenForm));
+
+  // ---------- Écran RPE ----------
+  const rpeScaleSlider = document.getElementById("rpe-scale");
+  rpeScaleSlider.addEventListener("input", () => {
+    document.getElementById("val-rpe-scale").textContent = rpeScaleSlider.value;
+  });
+  const rpeDureeSlider = document.getElementById("rpe-duree");
+  rpeDureeSlider.addEventListener("input", () => {
+    document.getElementById("val-rpe-duree").textContent = rpeDureeSlider.value + " min";
+  });
+
+  document.getElementById("btn-open-rpe").addEventListener("click", () => {
+    const prenomVal = document.getElementById("prenom").value.trim();
+    if(prenomVal) document.getElementById("rpe-prenom").value = prenomVal;
+    document.querySelectorAll("#screen-rpe .card, #screen-rpe > button#btn-rpe-envoyer").forEach(el => el.style.display = "");
+    document.getElementById("rpe-confirm").style.display = "none";
+    showScreen(screenRpe);
+  });
+  document.getElementById("btn-rpe-back").addEventListener("click", () => showScreen(screenForm));
+
+  function resetRpeForm(){
+    document.getElementById("rpe-prenom").value = "";
+    rpeScaleSlider.value = 5;
+    document.getElementById("val-rpe-scale").textContent = "5";
+    rpeDureeSlider.value = 60;
+    document.getElementById("val-rpe-duree").textContent = "60 min";
+    rpeTypeGroup.dataset.value = "entrainement";
+    rpeTypeGroup.querySelectorAll(".toggle-btn").forEach(b => b.classList.toggle("active", b.dataset.val === "entrainement"));
+    document.querySelectorAll("#screen-rpe .card, #screen-rpe > button#btn-rpe-envoyer").forEach(el => el.style.display = "");
+    document.getElementById("rpe-confirm").style.display = "none";
+  }
+
+  document.getElementById("btn-rpe-envoyer").addEventListener("click", async () => {
+    document.getElementById("debug-box").style.display = "none";
+    if(!sb){
+      showDebug("Supabase n'est pas chargé. Recharge la page avec une bonne connexion internet.");
+      return;
+    }
+    const prenom = document.getElementById("rpe-prenom").value.trim();
+    if(!prenom){
+      alert("Entre ton prénom avant d'envoyer.");
+      return;
+    }
+
+    const row = {
+      prenom,
+      categorie: getCategorie(),
+      type: rpeTypeGroup.dataset.value,
+      rpe: parseInt(rpeScaleSlider.value),
+      duree_min: parseInt(rpeDureeSlider.value)
+    };
+
+    const btn = document.getElementById("btn-rpe-envoyer");
+    btn.disabled = true;
+    btn.textContent = "Envoi...";
+
+    try{
+      const { error } = await sb.from("rpe_entries").insert([row]);
+      btn.disabled = false;
+      btn.textContent = "Envoyer";
+
+      if(error){
+        showDebug(error.message);
+        return;
+      }
+
+      document.querySelectorAll("#screen-rpe .card, #screen-rpe > button#btn-rpe-envoyer").forEach(el => el.style.display = "none");
+      document.getElementById("rpe-confirm").style.display = "block";
+    }catch(e){
+      btn.disabled = false;
+      btn.textContent = "Envoyer";
+      showDebug(e.message);
+    }
+  });
+
+  document.getElementById("btn-rpe-new").addEventListener("click", resetRpeForm);
 
   document.getElementById("btn-coach-login").addEventListener("click", async () => {
     document.getElementById("debug-box").style.display = "none";
@@ -677,6 +836,7 @@
       showScreen(coachPlayers);
       await loadAllEntries();
       renderPlayersList();
+      updateRpeSettingsUI();
     }catch(e){
       btn.disabled = false;
       btn.textContent = "Se connecter";
@@ -697,6 +857,7 @@
   document.getElementById("categorie-filter").addEventListener("change", () => {
     renderPlayersList();
     updateDeleteCategorieButton();
+    updateRpeSettingsUI();
   });
 
   function updateDeleteCategorieButton(){
@@ -704,6 +865,52 @@
     document.getElementById("btn-delete-categorie").style.display =
       (val && currentUserCategorie === "ALL") ? "block" : "none";
   }
+
+  function getRpeTargetCategorie(){
+    if(currentUserCategorie && currentUserCategorie !== "ALL") return currentUserCategorie;
+    return document.getElementById("categorie-filter").value;
+  }
+
+  async function updateRpeSettingsUI(){
+    const card = document.getElementById("rpe-settings-card");
+    const cat = getRpeTargetCategorie();
+    if(!cat){
+      card.style.display = "none";
+      return;
+    }
+    card.style.display = "block";
+    const statusText = document.getElementById("rpe-status-text");
+    const btn = document.getElementById("btn-toggle-rpe");
+    statusText.textContent = "Chargement...";
+    btn.disabled = true;
+    try{
+      const { data } = await sb.from("rpe_settings").select("enabled").eq("categorie", cat).maybeSingle();
+      const enabled = !!(data && data.enabled);
+      statusText.textContent = "Catégorie \"" + cat + "\" : RPE actuellement " + (enabled ? "activé ✅" : "désactivé");
+      btn.textContent = enabled ? "Désactiver le RPE" : "Activer le RPE";
+      btn.dataset.enabled = enabled ? "1" : "0";
+      btn.disabled = false;
+    }catch(e){
+      statusText.textContent = "Impossible de charger le réglage.";
+    }
+  }
+
+  document.getElementById("btn-toggle-rpe").addEventListener("click", async () => {
+    const cat = getRpeTargetCategorie();
+    if(!cat) return;
+    const btn = document.getElementById("btn-toggle-rpe");
+    const newValue = btn.dataset.enabled !== "1";
+    btn.disabled = true;
+    btn.textContent = "...";
+    try{
+      const { error } = await sb.from("rpe_settings").upsert({ categorie: cat, enabled: newValue, updated_at: new Date().toISOString() });
+      if(error){ showDebug(error.message); }
+      await updateRpeSettingsUI();
+    }catch(e){
+      showDebug(e.message);
+      btn.disabled = false;
+    }
+  });
 
   document.getElementById("btn-delete-categorie").addEventListener("click", async () => {
     const cat = document.getElementById("categorie-filter").value;
@@ -724,7 +931,10 @@
     btn.textContent = "Suppression...";
 
     try{
-      const { error } = await sb.from("checkin").delete().eq("categorie", cat);
+      const query = sb.from("checkin").delete();
+      const { error } = (cat === "Non catégorisé")
+        ? await query.or("categorie.is.null,categorie.eq.Non catégorisé")
+        : await query.eq("categorie", cat);
       if(error){
         showDebug(error.message);
         btn.disabled = false;
@@ -934,8 +1144,10 @@
     tableContainer.innerHTML = html;
     bindDeleteButtons(tableContainer, async () => {
       await loadAllEntries();
-      openPlayerDetail(currentPlayerName);
+      openPlayerDetail(currentPlayerName, currentPlayerCategorie);
     });
+
+    loadPlayerRpe(name, categorie);
   }
 
   function buildPerEntrySeries(entries){
@@ -1054,7 +1266,8 @@
     });
   }
 
-  async function bindDeleteButtons(container, onDeleted){
+  async function bindDeleteButtons(container, onDeleted, table){
+    table = table || "checkin";
     container.querySelectorAll(".btn-delete").forEach(btn => {
       btn.addEventListener("click", async () => {
         const id = btn.dataset.id;
@@ -1063,7 +1276,7 @@
         btn.disabled = true;
         btn.textContent = "...";
         try{
-          const { error } = await sb.from("checkin").delete().eq("id", id);
+          const { error } = await sb.from(table).delete().eq("id", id);
           if(error){
             showDebug(error.message);
             btn.disabled = false;
@@ -1078,6 +1291,91 @@
         }
       });
     });
+  }
+
+  // ---------- Charge d'entraînement : EWMA acute/chronic + ACWR ----------
+  function computeEwmaAcwr(rpeEntries){
+    if(rpeEntries.length === 0) return null;
+    const dailyLoad = {};
+    rpeEntries.forEach(e => {
+      const key = e.created_at.slice(0,10);
+      dailyLoad[key] = (dailyLoad[key] || 0) + (e.rpe * e.duree_min);
+    });
+    const dates = Object.keys(dailyLoad).sort();
+    const cursor = new Date(dates[0] + "T00:00:00Z");
+    const today = new Date();
+    today.setUTCHours(0,0,0,0);
+
+    const lambdaA = 2 / (7 + 1);
+    const lambdaC = 2 / (28 + 1);
+    let ewmaA = 0, ewmaC = 0;
+
+    while(cursor <= today){
+      const key = cursor.toISOString().slice(0,10);
+      const load = dailyLoad[key] || 0;
+      ewmaA = load * lambdaA + ewmaA * (1 - lambdaA);
+      ewmaC = load * lambdaC + ewmaC * (1 - lambdaC);
+      cursor.setUTCDate(cursor.getUTCDate() + 1);
+    }
+    const acwr = ewmaC > 0 ? (ewmaA / ewmaC) : null;
+    return { acute: ewmaA, chronic: ewmaC, acwr };
+  }
+
+  function getAcwrStatus(acwr){
+    if(acwr === null) return { label: "Pas assez de données", color: "var(--muted)" };
+    if(acwr < 0.8) return { label: "Sous-charge", color: "#f5a623" };
+    if(acwr <= 1.3) return { label: "Zone recommandée", color: "#2ecc71" };
+    if(acwr <= 1.5) return { label: "Vigilance", color: "#f5a623" };
+    return { label: "Risque élevé", color: "#e63946" };
+  }
+
+  async function loadPlayerRpe(name, categorie){
+    const card = document.getElementById("rpe-acwr-card");
+    const tableContainer = document.getElementById("rpe-table-container");
+    card.style.display = "none";
+    tableContainer.innerHTML = '<div class="loading">Chargement...</div>';
+
+    try{
+      const { data, error } = await sb.from("rpe_entries").select("*")
+        .eq("prenom", name).eq("categorie", categorie)
+        .order("created_at", { ascending: false });
+
+      if(error){
+        tableContainer.innerHTML = '<div class="empty-state">Erreur de lecture RPE.</div>';
+        return;
+      }
+      const entries = data || [];
+      if(entries.length === 0){
+        tableContainer.innerHTML = '<div class="empty-state">Aucune séance enregistrée.</div>';
+        return;
+      }
+
+      const stats = computeEwmaAcwr(entries);
+      const status = getAcwrStatus(stats.acwr);
+      card.style.display = "block";
+      card.innerHTML =
+        '<div class="field-label">Charge actuelle (EWMA)</div>' +
+        '<div style="display:flex;gap:20px;flex-wrap:wrap;margin-bottom:8px;">' +
+          '<div><div style="font-size:11px;color:var(--muted);">Aiguë (7j)</div><div style="font-size:18px;font-weight:700;">' + Math.round(stats.acute) + '</div></div>' +
+          '<div><div style="font-size:11px;color:var(--muted);">Chronique (28j)</div><div style="font-size:18px;font-weight:700;">' + Math.round(stats.chronic) + '</div></div>' +
+          '<div><div style="font-size:11px;color:var(--muted);">ACWR</div><div style="font-size:18px;font-weight:700;color:' + status.color + ';">' + (stats.acwr !== null ? stats.acwr.toFixed(2) : "-") + '</div></div>' +
+        '</div>' +
+        '<div style="font-size:13px;font-weight:600;color:' + status.color + ';">' + status.label + '</div>';
+
+      let html = "<table><thead><tr><th>Date</th><th>Type</th><th>RPE</th><th>Durée</th><th>Charge</th><th></th></tr></thead><tbody>";
+      entries.forEach(e => {
+        html += "<tr><td>" + escapeHtml(formatDate(e.created_at)) + "</td>" +
+          "<td>" + (e.type === "match" ? "Match" : "Entraînement") + "</td>" +
+          "<td>" + e.rpe + "</td><td>" + e.duree_min + " min</td><td>" + (e.rpe * e.duree_min) + "</td>" +
+          "<td><button class=\"btn-delete\" data-id=\"" + e.id + "\">🗑</button></td></tr>";
+      });
+      html += "</tbody></table>";
+      tableContainer.innerHTML = html;
+
+      bindDeleteButtons(tableContainer, () => loadPlayerRpe(name, categorie), "rpe_entries");
+    }catch(e){
+      tableContainer.innerHTML = '<div class="empty-state">Erreur de lecture RPE.</div>';
+    }
   }
 
   function formatDateShort(iso){
