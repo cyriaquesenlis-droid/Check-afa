@@ -147,6 +147,12 @@
   .player-item .p-meta{color:var(--muted);font-size:12px;margin-top:2px;}
   .player-item .p-arrow{color:var(--accent);font-size:18px;}
 
+  .name-chip{
+    padding:10px 16px;border-radius:20px;border:1px solid var(--track);
+    background:#081035;color:var(--ink);font-size:14px;cursor:pointer;
+  }
+  .name-chip.active{background:var(--accent);color:#1a1200;border-color:var(--accent);font-weight:600;}
+
   .autocomplete-wrap{position:relative;}
   .suggestions{
     display:none;position:absolute;left:0;right:0;top:calc(100% + 4px);
@@ -369,7 +375,9 @@
     </div>
 
     <div class="card">
-      <label class="field-label" for="rpe-prenom">Prénom</label>
+      <label class="field-label">Choisis ton prénom</label>
+      <div id="rpe-prenom-list" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px;"></div>
+      <label class="field-label" for="rpe-prenom">Ou tape-le (première fois)</label>
       <div class="autocomplete-wrap">
         <input type="text" id="rpe-prenom" placeholder="Ton prénom" autocomplete="off" style="margin-bottom:0;">
         <div class="suggestions" id="rpe-prenom-suggestions"></div>
@@ -623,6 +631,10 @@
     }catch(e){ /* pas grave, le bouton reste masqué */ }
   }
   checkRpeEnabled();
+  setInterval(checkRpeEnabled, 60000);
+  document.addEventListener("visibilitychange", () => {
+    if(document.visibilityState === "visible") checkRpeEnabled();
+  });
   if(!URL_CATEGORIE){
     document.getElementById("categorie-input").addEventListener("change", checkRpeEnabled);
   }
@@ -769,11 +781,32 @@
     document.getElementById("val-rpe-duree").textContent = rpeDureeSlider.value + " min";
   });
 
+  function renderRpePrenomList(){
+    const cat = getCategorie();
+    const names = rosterByCategorie[cat] ? [...rosterByCategorie[cat]].sort((a,b) => a.localeCompare(b, "fr")) : [];
+    const container = document.getElementById("rpe-prenom-list");
+    if(names.length === 0){
+      container.innerHTML = '<span style="font-size:13px;color:var(--muted);">Personne d\'enregistré pour l\'instant — tape ton prénom en dessous.</span>';
+      return;
+    }
+    container.innerHTML = names.map(n => '<button type="button" class="name-chip" data-name="' + n.replace(/"/g,"&quot;") + '">' + n + '</button>').join("");
+    const currentVal = document.getElementById("rpe-prenom").value.trim();
+    container.querySelectorAll(".name-chip").forEach(chip => {
+      if(chip.dataset.name === currentVal) chip.classList.add("active");
+      chip.addEventListener("click", () => {
+        container.querySelectorAll(".name-chip").forEach(c => c.classList.remove("active"));
+        chip.classList.add("active");
+        document.getElementById("rpe-prenom").value = chip.dataset.name;
+      });
+    });
+  }
+
   document.getElementById("btn-open-rpe").addEventListener("click", () => {
     const prenomVal = document.getElementById("prenom").value.trim();
     if(prenomVal) document.getElementById("rpe-prenom").value = prenomVal;
     document.querySelectorAll("#screen-rpe .card, #screen-rpe > button#btn-rpe-envoyer").forEach(el => el.style.display = "");
     document.getElementById("rpe-confirm").style.display = "none";
+    renderRpePrenomList();
     showScreen(screenRpe);
   });
   document.getElementById("btn-rpe-back").addEventListener("click", () => showScreen(screenForm));
@@ -822,6 +855,13 @@
       if(error){
         showDebug(error.message);
         return;
+      }
+
+      if(!rosterByCategorie[row.categorie]) rosterByCategorie[row.categorie] = new Set();
+      rosterByCategorie[row.categorie].add(row.prenom);
+      if(!rosterCategories.includes(row.categorie)){
+        rosterCategories.push(row.categorie);
+        rosterCategories.sort((a,b) => a.localeCompare(b, "fr"));
       }
 
       document.querySelectorAll("#screen-rpe .card, #screen-rpe > button#btn-rpe-envoyer").forEach(el => el.style.display = "none");
