@@ -1158,6 +1158,11 @@
         const stats = computeEwmaAcwr(rpeForPlayer);
         const status = getAcwrStatus(stats.acwr);
         dots += '<span class="dot" style="background:' + status.color + '" title="Charge (ACWR) : ' + status.label + '"></span>';
+
+        const combined = computeCombinedRisk(ascEntries, rpeForPlayer);
+        if(combined.risk){
+          badges += ' <span title="Charge élevée ET récupération faible sur les 3 dernières réponses">🚨</span>';
+        }
       }
 
       html += '<button class="player-item" data-player="' + escapeHtml(g.prenom) + '" data-categorie="' + escapeHtml(g.categorie) + '">' +
@@ -1187,6 +1192,35 @@
     if(value < 4) return "#e63946";
     if(value < 7) return "#f5a623";
     return "#2ecc71";
+  }
+
+  // Risque combiné : charge d'entraînement élevée ET récupération faible en même temps.
+  // C'est le vrai signal à surveiller — l'un des deux seul n'est pas forcément un problème.
+  function computeCombinedRisk(wellnessEntriesAsc, rpeEntries){
+    if(!rpeEntries || rpeEntries.length === 0) return { risk: false };
+    const stats = computeEwmaAcwr(rpeEntries);
+    if(!stats || stats.acwr === null) return { risk: false };
+    const loadHigh = stats.acwr > 1.3;
+    if(!loadHigh) return { risk: false };
+
+    const lastThree = wellnessEntriesAsc.slice(-3);
+    if(lastThree.length === 0) return { risk: false };
+    const scores = lastThree.map(e => computeThemeScores(e));
+
+    function avgOf(key){
+      const vals = scores.map(s => s[key]).filter(v => v !== null && v !== undefined);
+      return vals.length ? (vals.reduce((a,b)=>a+b,0) / vals.length) : null;
+    }
+    const avgSommeil = avgOf("sommeil");
+    const avgMental = avgOf("mental");
+    const avgGeneral = avgOf("general");
+
+    const poorRecovery =
+      (avgSommeil !== null && avgSommeil < 4) ||
+      (avgMental !== null && avgMental < 4) ||
+      (avgGeneral !== null && avgGeneral >= 7);
+
+    return { risk: poorRecovery, acwr: stats.acwr, nbJours: lastThree.length };
   }
 
   function computeAlerts(entries){
@@ -1514,6 +1548,14 @@
           '<div><div style="font-size:11px;color:var(--muted);">ACWR</div><div style="font-size:18px;font-weight:700;color:' + status.color + ';">' + (stats.acwr !== null ? stats.acwr.toFixed(2) : "-") + '</div></div>' +
         '</div>' +
         '<div style="font-size:13px;font-weight:600;color:' + status.color + ';">' + status.label + '</div>';
+
+      const combined = computeCombinedRisk(currentPlayerEntries, entries);
+      if(combined.risk){
+        const existing = document.getElementById("player-alerts").innerHTML;
+        document.getElementById("player-alerts").innerHTML = existing +
+          '<div class="alert-box" style="display:block;margin-top:8px;background:rgba(230,57,70,0.25);border-color:#e63946;">' +
+          '🚨 Charge d\'entraînement élevée (ACWR ' + combined.acwr.toFixed(2) + ') ET récupération faible sur ses ' + combined.nbJours + ' dernières réponses — accumulation à risque, à surveiller de près.</div>';
+      }
 
       let html = "<table><thead><tr><th>Date</th><th>Type</th><th>RPE</th><th>Durée</th><th>Charge</th><th></th></tr></thead><tbody>";
       entries.forEach(e => {
