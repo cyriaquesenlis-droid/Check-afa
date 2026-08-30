@@ -146,6 +146,8 @@
   .player-item .p-name{font-weight:700;font-size:15px;}
   .player-item .p-meta{color:var(--muted);font-size:12px;margin-top:2px;}
   .player-item .p-arrow{color:var(--accent);font-size:18px;}
+  .p-dots{display:flex;gap:5px;margin-top:4px;}
+  .dot{width:9px;height:9px;border-radius:50%;display:inline-block;}
 
   .name-chip{
     padding:10px 16px;border-radius:20px;border:1px solid var(--track);
@@ -375,9 +377,7 @@
     </div>
 
     <div class="card">
-      <label class="field-label">Choisis ton prénom</label>
-      <div id="rpe-prenom-list" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px;"></div>
-      <label class="field-label" for="rpe-prenom">Ou tape-le (première fois)</label>
+      <label class="field-label" for="rpe-prenom">Prénom</label>
       <div class="autocomplete-wrap">
         <input type="text" id="rpe-prenom" placeholder="Ton prénom" autocomplete="off" style="margin-bottom:0;">
         <div class="suggestions" id="rpe-prenom-suggestions"></div>
@@ -781,32 +781,11 @@
     document.getElementById("val-rpe-duree").textContent = rpeDureeSlider.value + " min";
   });
 
-  function renderRpePrenomList(){
-    const cat = getCategorie();
-    const names = rosterByCategorie[cat] ? [...rosterByCategorie[cat]].sort((a,b) => a.localeCompare(b, "fr")) : [];
-    const container = document.getElementById("rpe-prenom-list");
-    if(names.length === 0){
-      container.innerHTML = '<span style="font-size:13px;color:var(--muted);">Personne d\'enregistré pour l\'instant — tape ton prénom en dessous.</span>';
-      return;
-    }
-    container.innerHTML = names.map(n => '<button type="button" class="name-chip" data-name="' + n.replace(/"/g,"&quot;") + '">' + n + '</button>').join("");
-    const currentVal = document.getElementById("rpe-prenom").value.trim();
-    container.querySelectorAll(".name-chip").forEach(chip => {
-      if(chip.dataset.name === currentVal) chip.classList.add("active");
-      chip.addEventListener("click", () => {
-        container.querySelectorAll(".name-chip").forEach(c => c.classList.remove("active"));
-        chip.classList.add("active");
-        document.getElementById("rpe-prenom").value = chip.dataset.name;
-      });
-    });
-  }
-
   document.getElementById("btn-open-rpe").addEventListener("click", () => {
     const prenomVal = document.getElementById("prenom").value.trim();
     if(prenomVal) document.getElementById("rpe-prenom").value = prenomVal;
     document.querySelectorAll("#screen-rpe .card, #screen-rpe > button#btn-rpe-envoyer").forEach(el => el.style.display = "");
     document.getElementById("rpe-confirm").style.display = "none";
-    renderRpePrenomList();
     showScreen(screenRpe);
   });
   document.getElementById("btn-rpe-back").addEventListener("click", () => showScreen(screenForm));
@@ -1071,6 +1050,7 @@
   document.getElementById("btn-to-form-from-detail").addEventListener("click", backToForm);
 
   let allEntries = [];
+  let allRpeEntries = [];
   let currentPlayerName = "";
   let currentPlayerCategorie = "";
   let currentUserCategorie = "";
@@ -1101,6 +1081,13 @@
       return;
     }
     allEntries = data || [];
+
+    try{
+      const { data: rpeData } = await sb.from("rpe_entries").select("*");
+      allRpeEntries = rpeData || [];
+    }catch(e){
+      allRpeEntries = [];
+    }
   }
 
   function renderPlayersList(){
@@ -1154,8 +1141,28 @@
       if(alerts.painAlert) badges += ' <span title="Douleur élevée sur la dernière réponse">⚠️</span>';
       if(alerts.sickAlert) badges += ' <span title="Malade sur la dernière réponse">🤒</span>';
       if(alerts.sleepAlert) badges += ' <span title="Sommeil faible depuis ' + alerts.sleepStreak + ' réponses">😴</span>';
+      if(alerts.mentalAlert) badges += ' <span title="Mental bas depuis ' + alerts.mentalStreak + ' réponses">🧠</span>';
+      if(alerts.generalAlert) badges += ' <span title="État général alarmant depuis ' + alerts.generalStreak + ' réponses">🔥</span>';
+
+      // Pastilles : dernière réponse (sommeil / état général / mental)
+      const ascEntries = [...entries].sort((a,b) => a.created_at.localeCompare(b.created_at));
+      const lastScores = computeThemeScores(ascEntries[ascEntries.length - 1]);
+      let dots =
+        '<span class="dot" style="background:' + getScoreColor("sommeil", lastScores.sommeil) + '" title="Sommeil"></span>' +
+        '<span class="dot" style="background:' + getScoreColor("general", lastScores.general) + '" title="État général"></span>' +
+        '<span class="dot" style="background:' + getScoreColor("mental", lastScores.mental) + '" title="Mental"></span>';
+
+      // Pastille charge (ACWR) si des séances RPE existent pour ce joueur
+      const rpeForPlayer = allRpeEntries.filter(r => r.prenom === g.prenom && r.categorie === g.categorie);
+      if(rpeForPlayer.length > 0){
+        const stats = computeEwmaAcwr(rpeForPlayer);
+        const status = getAcwrStatus(stats.acwr);
+        dots += '<span class="dot" style="background:' + status.color + '" title="Charge (ACWR) : ' + status.label + '"></span>';
+      }
+
       html += '<button class="player-item" data-player="' + escapeHtml(g.prenom) + '" data-categorie="' + escapeHtml(g.categorie) + '">' +
         '<div><div class="p-name">' + escapeHtml(g.prenom) + badges + '</div>' +
+        '<div class="p-dots">' + dots + '</div>' +
         '<div class="p-meta">' + escapeHtml(g.categorie) + ' · ' + entries.length + (entries.length > 1 ? ' réponses · ' : ' réponse · ') +
         'dernière le ' + escapeHtml(formatDate(lastDate)) + '</div></div>' +
         '<span class="p-arrow">→</span></button>';
@@ -1167,20 +1174,55 @@
     });
   }
 
+  // Couleur d'un score composite : le sens (haut=bien ou haut=alarme) dépend du thème.
+  function getScoreColor(theme, value){
+    if(value === null || value === undefined) return "#3a4a7a"; // gris-bleu, pas de donnée
+    if(theme === "general"){
+      // haut = alarme (énergie basse, courbatures/douleur hautes)
+      if(value >= 7) return "#e63946";
+      if(value >= 4) return "#f5a623";
+      return "#2ecc71";
+    }
+    // sommeil / mental : haut = bien
+    if(value < 4) return "#e63946";
+    if(value < 7) return "#f5a623";
+    return "#2ecc71";
+  }
+
   function computeAlerts(entries){
     const asc = [...entries].sort((a,b) => a.created_at.localeCompare(b.created_at));
     const last = asc[asc.length - 1];
     const painAlert = !!(last && last.douleur !== null && last.douleur !== undefined && last.douleur >= 6);
     const sickAlert = !!(last && last.malade === true);
 
-    let streak = 0;
+    let sleepStreak = 0;
     for(let i = asc.length - 1; i >= 0; i--){
       const e = asc[i];
       const q = e.qualite_sommeil, t = e.quantite_sommeil;
       if(q === null || q === undefined || t === null || t === undefined) break;
-      if((q + t) < 10){ streak++; } else { break; }
+      if((q + t) < 10){ sleepStreak++; } else { break; }
     }
-    return { painAlert, sickAlert, sleepAlert: streak >= 3, sleepStreak: streak };
+
+    // Séries basées sur les scores composites : Mental bas ou État général élevé (alarme)
+    // pendant 3 réponses consécutives ou plus.
+    function trailingStreak(predicate){
+      let streak = 0;
+      for(let i = asc.length - 1; i >= 0; i--){
+        const s = computeThemeScores(asc[i]);
+        if(!predicate(s)) break;
+        streak++;
+      }
+      return streak;
+    }
+    const mentalStreak = trailingStreak(s => s.mental !== null && s.mental < 4);
+    const generalStreak = trailingStreak(s => s.general !== null && s.general >= 7);
+
+    return {
+      painAlert, sickAlert,
+      sleepAlert: sleepStreak >= 3, sleepStreak,
+      mentalAlert: mentalStreak >= 3, mentalStreak,
+      generalAlert: generalStreak >= 3, generalStreak
+    };
   }
 
   function computeThemeScores(e){
@@ -1217,6 +1259,12 @@
     }
     if(alerts.sleepAlert){
       alertsHtml += '<div class="alert-box" style="display:block;margin-top:8px;">😴 Sommeil faible (qualité + quantité) depuis ' + alerts.sleepStreak + ' réponses consécutives.</div>';
+    }
+    if(alerts.mentalAlert){
+      alertsHtml += '<div class="alert-box" style="display:block;margin-top:8px;">🧠 Mental bas depuis ' + alerts.mentalStreak + ' réponses consécutives.</div>';
+    }
+    if(alerts.generalAlert){
+      alertsHtml += '<div class="alert-box" style="display:block;margin-top:8px;">🔥 État général alarmant depuis ' + alerts.generalStreak + ' réponses consécutives.</div>';
     }
     document.getElementById("player-alerts").innerHTML = alertsHtml;
 
