@@ -419,11 +419,19 @@
       </select>
       <button class="btn-delete" id="btn-delete-categorie" style="display:none;width:100%;margin-top:10px;padding:12px;">🗑 Supprimer toute cette catégorie</button>
       <div id="rpe-settings-card" class="card" style="display:none;margin-top:14px;padding:14px;">
-        <div class="field-label">Planning RPE — jours d'entraînement/match</div>
-        <p style="font-size:12px;color:var(--muted);margin:0 0 12px;">Coche les jours concernés et l'heure à partir de laquelle le RPE s'ouvre ce jour-là.</p>
-        <div id="rpe-schedule-rows"></div>
-        <button class="btn-secondary" id="btn-save-schedule" style="width:100%;margin-top:12px;">Enregistrer le planning</button>
-        <p id="rpe-schedule-status" style="font-size:12px;color:var(--accent);margin:8px 0 0;display:none;">Enregistré ✓</p>
+        <button type="button" id="btn-toggle-schedule-view" style="width:100%;background:none;border:none;padding:0;text-align:left;color:var(--ink);cursor:pointer;display:flex;justify-content:space-between;align-items:center;">
+          <span>
+            <span class="field-label" style="margin:0;">🏋️ Planning RPE</span>
+            <span id="rpe-schedule-summary" style="display:block;font-size:12px;color:var(--muted);margin-top:2px;">Chargement...</span>
+          </span>
+          <span id="rpe-schedule-caret" style="color:var(--accent);font-size:18px;">▸</span>
+        </button>
+        <div id="rpe-schedule-detail" style="display:none;margin-top:12px;">
+          <p style="font-size:12px;color:var(--muted);margin:0 0 12px;">Coche les jours concernés et l'heure à partir de laquelle le RPE s'ouvre ce jour-là.</p>
+          <div id="rpe-schedule-rows"></div>
+          <button class="btn-secondary" id="btn-save-schedule" style="width:100%;margin-top:12px;">Enregistrer le planning</button>
+          <p id="rpe-schedule-status" style="font-size:12px;color:var(--accent);margin:8px 0 0;display:none;">Enregistré ✓</p>
+        </div>
       </div>
     </div>
     <div class="coach-toolbar">
@@ -937,7 +945,22 @@
         '<input type="time" data-day-time="' + j.num + '" value="' + heure + '">' +
         '</div>';
     }).join("");
+
+    // Résumé visible même replié, ex: "Lun 18:00 · Mer 18:00 · Ven 19:00"
+    const activeDays = JOURS_SEMAINE.filter(j => byDay[j.num]);
+    const summary = document.getElementById("rpe-schedule-summary");
+    summary.textContent = activeDays.length === 0
+      ? "Aucun jour configuré"
+      : activeDays.map(j => j.label.slice(0,3) + " " + byDay[j.num].slice(0,5)).join(" · ");
   }
+
+  document.getElementById("btn-toggle-schedule-view").addEventListener("click", () => {
+    const detail = document.getElementById("rpe-schedule-detail");
+    const caret = document.getElementById("rpe-schedule-caret");
+    const isOpen = detail.style.display !== "none";
+    detail.style.display = isOpen ? "none" : "block";
+    caret.textContent = isOpen ? "▸" : "▾";
+  });
 
   async function updateRpeSettingsUI(){
     const card = document.getElementById("rpe-settings-card");
@@ -947,6 +970,8 @@
       return;
     }
     card.style.display = "block";
+    document.getElementById("rpe-schedule-detail").style.display = "none";
+    document.getElementById("rpe-schedule-caret").textContent = "▸";
     document.getElementById("rpe-schedule-status").style.display = "none";
     try{
       const { data } = await sb.from("rpe_schedule").select("jour_semaine, heure_activation").eq("categorie", cat);
@@ -989,6 +1014,14 @@
       const status = document.getElementById("rpe-schedule-status");
       status.style.display = "block";
       setTimeout(() => status.style.display = "none", 2500);
+
+      const summaryRows = daysChecked.map(day => {
+        const j = JOURS_SEMAINE.find(jj => jj.num === day);
+        const time = toUpsert.find(t => t.jour_semaine === day).heure_activation;
+        return j.label.slice(0,3) + " " + time;
+      });
+      document.getElementById("rpe-schedule-summary").textContent =
+        summaryRows.length === 0 ? "Aucun jour configuré" : summaryRows.join(" · ");
     }catch(e){
       showDebug(e.message);
       btn.disabled = false;
@@ -1156,7 +1189,7 @@
       const rpeForPlayer = allRpeEntries.filter(r => r.prenom === g.prenom && r.categorie === g.categorie);
       if(rpeForPlayer.length > 0){
         const stats = computeEwmaAcwr(rpeForPlayer);
-        const status = getAcwrStatus(stats.acwr);
+        const status = getAcwrStatus(stats.acwr, stats.enoughData);
         dots += '<span class="dot" style="background:' + status.color + '" title="Charge (ACWR) : ' + status.label + '"></span>';
 
         const combined = computeCombinedRisk(ascEntries, rpeForPlayer);
@@ -1199,7 +1232,7 @@
   function computeCombinedRisk(wellnessEntriesAsc, rpeEntries){
     if(!rpeEntries || rpeEntries.length === 0) return { risk: false };
     const stats = computeEwmaAcwr(rpeEntries);
-    if(!stats || stats.acwr === null) return { risk: false };
+    if(!stats || stats.acwr === null || !stats.enoughData) return { risk: false };
     const loadHigh = stats.acwr > 1.3;
     if(!loadHigh) return { risk: false };
 
@@ -1495,7 +1528,11 @@
 
     const lambdaA = 2 / (7 + 1);
     const lambdaC = 2 / (28 + 1);
-    let ewmaA = 0, ewmaC = 0;
+    // On démarre les deux moyennes au niveau de la toute première charge enregistrée,
+    // pas à zéro — sinon la moyenne aiguë (réactive) s'envole artificiellement avant
+    // que la chronique (lente) n'ait eu le temps de suivre, faussant le ratio au début.
+    const firstLoad = dailyLoad[dates[0]] || 0;
+    let ewmaA = firstLoad, ewmaC = firstLoad;
 
     while(cursor <= today){
       const key = cursor.toISOString().slice(0,10);
@@ -1505,11 +1542,12 @@
       cursor.setUTCDate(cursor.getUTCDate() + 1);
     }
     const acwr = ewmaC > 0 ? (ewmaA / ewmaC) : null;
-    return { acute: ewmaA, chronic: ewmaC, acwr };
+    const enoughData = rpeEntries.length >= 3;
+    return { acute: ewmaA, chronic: ewmaC, acwr, enoughData };
   }
 
-  function getAcwrStatus(acwr){
-    if(acwr === null) return { label: "Pas assez de données", color: "var(--muted)" };
+  function getAcwrStatus(acwr, enoughData){
+    if(acwr === null || enoughData === false) return { label: "Pas assez de données (min. 3 séances)", color: "var(--muted)" };
     if(acwr < 0.8) return { label: "Sous-charge", color: "#f5a623" };
     if(acwr <= 1.3) return { label: "Zone recommandée", color: "#2ecc71" };
     if(acwr <= 1.5) return { label: "Vigilance", color: "#f5a623" };
@@ -1538,7 +1576,7 @@
       }
 
       const stats = computeEwmaAcwr(entries);
-      const status = getAcwrStatus(stats.acwr);
+      const status = getAcwrStatus(stats.acwr, stats.enoughData);
       card.style.display = "block";
       card.innerHTML =
         '<div class="field-label">Charge actuelle (EWMA)</div>' +
