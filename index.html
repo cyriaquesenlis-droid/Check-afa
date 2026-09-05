@@ -412,6 +412,7 @@
   <div id="coach-players">
     <h1>Joueurs</h1>
     <p class="sub" id="players-count"></p>
+    <p id="players-alert-summary" style="font-weight:700;font-size:14px;margin:0 0 14px;display:none;"></p>
     <div id="categorie-filter-wrap" style="display:none;margin-bottom:14px;">
       <label class="field-label" for="categorie-filter">Filtrer par catégorie</label>
       <select id="categorie-filter" style="width:100%;padding:12px;font-size:15px;border-radius:10px;border:1px solid var(--track);background:#081035;color:var(--ink);">
@@ -1164,6 +1165,27 @@
     });
 
     const keys = Object.keys(groups).sort((a,b) => groups[a].prenom.localeCompare(groups[b].prenom, "fr"));
+
+    // Résumé "X joueurs en alerte sur Y"
+    let nbEnAlerte = 0;
+    keys.forEach(key => {
+      const g = groups[key];
+      const alerts = computeAlerts(g.entries);
+      const rpeForPlayer = allRpeEntries.filter(r => r.prenom === g.prenom && r.categorie === g.categorie);
+      const ascEntries = [...g.entries].sort((a,b) => a.created_at.localeCompare(b.created_at));
+      const combined = rpeForPlayer.length > 0 ? computeCombinedRisk(ascEntries, rpeForPlayer) : { risk: false };
+      const hasAlert = alerts.painAlert || alerts.sickAlert || alerts.sleepAlert || alerts.mentalAlert || alerts.generalAlert || combined.risk;
+      if(hasAlert) nbEnAlerte++;
+    });
+    const summaryEl = document.getElementById("players-alert-summary");
+    if(keys.length === 0){
+      summaryEl.style.display = "none";
+    } else {
+      summaryEl.style.display = "block";
+      summaryEl.textContent = (nbEnAlerte > 0 ? "⚠️ " : "✅ ") + nbEnAlerte + " joueur" + (nbEnAlerte > 1 ? "s" : "") + " en alerte sur " + keys.length;
+      summaryEl.style.color = nbEnAlerte > 0 ? "#e63946" : "#2ecc71";
+    }
+
     let html = "";
     keys.forEach(key => {
       const g = groups[key];
