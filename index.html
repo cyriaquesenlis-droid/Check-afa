@@ -1542,12 +1542,14 @@
       cursor.setUTCDate(cursor.getUTCDate() + 1);
     }
     const acwr = ewmaC > 0 ? (ewmaA / ewmaC) : null;
-    const enoughData = rpeEntries.length >= 3;
-    return { acute: ewmaA, chronic: ewmaC, acwr, enoughData };
+    const firstDate = new Date(dates[0] + "T00:00:00Z");
+    const daysElapsed = Math.floor((today - firstDate) / (1000*60*60*24));
+    const enoughData = daysElapsed >= 21;
+    return { acute: ewmaA, chronic: ewmaC, acwr, enoughData, daysElapsed };
   }
 
   function getAcwrStatus(acwr, enoughData){
-    if(acwr === null || enoughData === false) return { label: "Pas assez de données (min. 3 séances)", color: "var(--muted)" };
+    if(acwr === null || enoughData === false) return { label: "Pas assez de données (min. 3 semaines d'historique)", color: "var(--muted)" };
     if(acwr < 0.8) return { label: "Sous-charge", color: "#f5a623" };
     if(acwr <= 1.3) return { label: "Zone recommandée", color: "#2ecc71" };
     if(acwr <= 1.5) return { label: "Vigilance", color: "#f5a623" };
